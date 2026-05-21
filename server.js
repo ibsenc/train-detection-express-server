@@ -41,7 +41,7 @@ async function uploadToS3(buffer, key) {
     Body: buffer,
     ContentType: 'audio/wav',
   }));
-  return `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
+  return `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION || 'us-west-2'}.amazonaws.com/${key}`;
 }
 
 function sendMessage(phoneNumber, message) {
@@ -63,6 +63,9 @@ function sendMessage(phoneNumber, message) {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Regex for standard UUID v4 format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // --- Thresholds for confirming a detection is likely a train ---
 const TRAIN_MIN_DECIBELS = 65;
@@ -96,16 +99,15 @@ app.get('/health', async (req, res) => {
 //
 // Body (multipart/form-data):
 //   audio_file        {file}    optional  — raw .wav recording (max 6 MB)
+//   id                {string}  required  — client-generated UUID for cross-referencing
 //   decibels          {number}  required  — measured sound level in dB
 //   duration_seconds  {number}  required  — how long the event lasted
 //   timestamp         {string}  optional  — ISO 8601; defaults to now()
 //   source            {string}  optional  — sensor label / identifier
-//   uuid              {string}  optional  — client-generated UUID for cross-referencing
 // ---------------------------------------------------------------------------
 app.post('/api/detections', upload.single('audio_file'), async (req, res) => {
   const { decibels, duration_seconds, timestamp, source, id } = req.body;
 
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!id) {
     return res.status(400).json({ error: '`id` is required' });
   }
@@ -348,7 +350,6 @@ app.get('/api/detections/stats', async (req, res) => {
 // Fetch a single detection by its ID.
 // ---------------------------------------------------------------------------
 app.get('/api/detections/:id', async (req, res) => {
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!UUID_RE.test(req.params.id)) return res.status(400).json({ error: 'Invalid detection ID' });
 
   try {
@@ -371,7 +372,6 @@ app.get('/api/detections/:id', async (req, res) => {
 const AUDIO_URL_EXPIRY_SECONDS = 604800; // 7 days
 
 app.get('/api/detections/:id/audio-url', async (req, res) => {
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!UUID_RE.test(req.params.id)) return res.status(400).json({ error: 'Invalid detection ID' });
 
   try {
@@ -402,7 +402,6 @@ app.get('/api/detections/:id/audio-url', async (req, res) => {
 //   is_confirmed_train  {boolean}  required
 // ---------------------------------------------------------------------------
 app.patch('/api/detections/:id', async (req, res) => {
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!UUID_RE.test(req.params.id)) return res.status(400).json({ error: 'Invalid detection ID' });
 
   const { is_confirmed_train } = req.body;

@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS detections (
     duration_seconds    NUMERIC(7, 2) NOT NULL,
     source              VARCHAR(255),
     audio_url           TEXT,
-    -- Auto-flagged by threshold: decibels >= 96 AND duration >= 10s
+    -- Auto-flagged by threshold: decibels >= TRAIN_MIN_DECIBELS AND duration >= TRAIN_MIN_DURATION_SECONDS
     is_suspected_train  BOOLEAN NOT NULL DEFAULT FALSE,
     -- Manually set via API: NULL = unreviewed, true = confirmed train, false = false positive
     is_confirmed_train  BOOLEAN DEFAULT NULL,

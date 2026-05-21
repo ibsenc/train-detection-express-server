@@ -1,6 +1,9 @@
 # Train Detection API
 
-Base URL: `http://<your-server>:<port>`
+| Environment | Base URL |
+|-------------|----------|
+| Local | `http://localhost:3000` |
+| Lambda / API Gateway | See `API_BASE_URL` in your environment config |
 
 ---
 
@@ -45,6 +48,8 @@ Check server and database connectivity.
 
 Sends a test iMessage to `ALERT_PHONE_NUMBER` to verify alerts are working.
 
+Note: Only works for local running server on macOS.
+
 **Response `200`**
 ```json
 { "message": "Test alert sent to +15551234567" }
@@ -74,7 +79,7 @@ Ingest a new sound event from a sensor node.
 | `id` | string (UUID) | Yes | Client-generated UUID — used as the S3 filename and stored for cross-referencing |
 | `audio_file` | file (.wav) | No | Raw audio recording (max 6 MB) |
 
-Events are automatically flagged `is_suspected_train: true` when `decibels >= 65` and `duration_seconds >= 1`. If a phone number is configured, an iMessage alert is sent for suspected trains. `is_confirmed_train` is always `null` on creation and must be set manually via `PATCH`.
+Events are automatically flagged `is_suspected_train: true` when `decibels >= TRAIN_MIN_DECIBELS` and `duration_seconds >= TRAIN_MIN_DURATION_SECONDS`. `is_confirmed_train` is always `null` on creation and must be set manually via `PATCH`. (Local only) If a phone number is configured, an iMessage alert is sent for suspected trains.
 
 **Response `201`**
 ```json
