@@ -308,13 +308,44 @@ app.get('/api/detections', async (req, res) => {
 //
 // Query params:
 //   source  {string}  — filter by sensor label
+//   start   {string}  ISO 8601 — range start (inclusive); defaults to all time
+//   end     {string}  ISO 8601 — range end (inclusive); defaults to all time
 // ---------------------------------------------------------------------------
 app.get('/api/detections/stats', async (req, res) => {
-  const { source } = req.query;
+  const { source, start, end } = req.query;
   const params = [];
-  const sourceFilter = source
-    ? (() => { params.push(source); return `AND source = $${params.length}`; })()
-    : '';
+  const conditions = ['1=1'];
+
+  if (source) {
+    params.push(source);
+    conditions.push(`source = $${params.length}`);
+  }
+
+  let startDate = null;
+  let endDate = null;
+
+  if (start) {
+    startDate = new Date(start);
+    if (isNaN(startDate.getTime())) return res.status(400).json({ error: 'Invalid `start` date' });
+  }
+  if (end) {
+    endDate = new Date(end);
+    if (isNaN(endDate.getTime())) return res.status(400).json({ error: 'Invalid `end` date' });
+  }
+  if (startDate && endDate && startDate > endDate) {
+    return res.status(400).json({ error: '`start` must be before or equal to `end`' });
+  }
+
+  if (startDate) {
+    params.push(startDate.toISOString());
+    conditions.push(`timestamp >= $${params.length}`);
+  }
+  if (endDate) {
+    params.push(endDate.toISOString());
+    conditions.push(`timestamp <= $${params.length}`);
+  }
+
+  const where = `WHERE ${conditions.join(' AND ')}`;
 
   try {
     const result = await pool.query(
@@ -325,6 +356,7 @@ app.get('/api/detections/stats', async (req, res) => {
          COUNT(*) FILTER (WHERE is_confirmed_train = false)                    AS confirmed_false_positives,
          COUNT(*) FILTER (WHERE is_confirmed_train IS NULL
                             AND is_suspected_train = true)                     AS unreviewed_suspected,
+         -- TODO: remove suspected_last_24h/7d once frontend uses start/end params to compute these windows itself
          COUNT(*) FILTER (WHERE timestamp >= NOW() - INTERVAL '24 hours'
                             AND is_suspected_train = true)                     AS suspected_last_24h,
          COUNT(*) FILTER (WHERE timestamp >= NOW() - INTERVAL '7 days'
@@ -335,7 +367,7 @@ app.get('/api/detections/stats', async (req, res) => {
          ROUND(MAX(decibels)::numeric, 2)                                     AS max_decibels,
          ROUND(AVG(duration_seconds)::numeric, 2)                             AS avg_duration_seconds
        FROM detections
-       WHERE 1=1 ${sourceFilter}`,
+       ${where}`,
       params
     );
     res.json(result.rows[0]);
