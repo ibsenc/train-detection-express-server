@@ -67,9 +67,9 @@ const PORT = process.env.PORT || 3000;
 // Regex for standard UUID v4 format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// --- Thresholds for confirming a detection is likely a train ---
-const TRAIN_MIN_DECIBELS = 65;
-const TRAIN_MIN_DURATION_SECONDS = 1;
+// --- Thresholds for flagging a detection as a suspected train ---
+const TRAIN_MIN_DECIBELS = parseFloat(process.env.TRAIN_MIN_DECIBELS) || 65;
+const TRAIN_MIN_DURATION_SECONDS = parseFloat(process.env.TRAIN_MIN_DURATION_SECONDS) || 1;
 
 app.use(cors());
 app.use(express.json());

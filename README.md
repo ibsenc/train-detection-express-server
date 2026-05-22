@@ -31,15 +31,21 @@ DB_SSL=false
 # Optional: iMessage alerts (macOS - local testing only)
 ALERT_PHONE_NUMBER=+1xxxxxxxxxx
 
+# Detection thresholds (optional, these are the defaults)
+TRAIN_MIN_DECIBELS=65
+TRAIN_MIN_DURATION_SECONDS=1
+
 # AWS S3 (for audio storage)
 AWS_REGION=us-west-2
 AWS_S3_BUCKET=your_bucket_name
 ```
 
-For Lambda function, only these values are needed in environment variables:
+For Lambda function, these values are needed as environment variables:
 ```
 AWS_S3_BUCKET=your-bucket-name
 DATABASE_URL=postgresql://neondb_owner...
+TRAIN_MIN_DECIBELS=65
+TRAIN_MIN_DURATION_SECONDS=1
 ```
 
 ### 3. Initialize the database
