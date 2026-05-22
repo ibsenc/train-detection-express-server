@@ -111,21 +111,22 @@ The `POST /api/detections` endpoint accepts `multipart/form-data` uploads contai
 
 **Local database:**
 ```bash
-pg_dump -U postgres train_detection > local_dump.sql
+pg_dump -U postgres train_detection > local_dump_05_22_2026.sql
 ```
 
 **Remote database (via `DATABASE_URL`):**
 
 Use `--no-owner --no-privileges` to strip out hosted-Postgres-specific roles (e.g. Neon's `neondb_owner`) that don't exist locally:
 ```bash
-pg_dump "$DATABASE_URL" --no-owner --no-privileges > remote_dump_05_21_2026.sql
+pg_dump "$TRAIN_DATABASE_URL_PROD" --no-owner --no-privileges > remote_dump_05_22_2026.sql
 ```
 
 ### Restore
 
-Drop and recreate the local database first to avoid conflicts with existing schema or data, then restore with local or remote dump:
+Terminate any connections to the db, drop and recreate the local database (to avoid schema conflicts), then restore with local or remote dump:
 ```bash
+psql -U postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'train_detection' AND pid <> pg_backend_pid();"
 dropdb -U postgres train_detection
 createdb -U postgres train_detection
-psql -U postgres -d train_detection < local_dump.sql
+psql -U postgres -d train_detection < remote_dump_05_22_2026.sql
 ```
