@@ -308,13 +308,32 @@ app.get('/api/detections', async (req, res) => {
 //
 // Query params:
 //   source  {string}  — filter by sensor label
+//   start   {string}  ISO 8601 — range start (inclusive); defaults to all time
+//   end     {string}  ISO 8601 — range end (inclusive); defaults to all time
 // ---------------------------------------------------------------------------
 app.get('/api/detections/stats', async (req, res) => {
-  const { source } = req.query;
+  const { source, start, end } = req.query;
   const params = [];
-  const sourceFilter = source
-    ? (() => { params.push(source); return `AND source = $${params.length}`; })()
-    : '';
+  const conditions = ['1=1'];
+
+  if (source) {
+    params.push(source);
+    conditions.push(`source = $${params.length}`);
+  }
+  if (start) {
+    const d = new Date(start);
+    if (isNaN(d.getTime())) return res.status(400).json({ error: 'Invalid `start` date' });
+    params.push(d.toISOString());
+    conditions.push(`timestamp >= $${params.length}`);
+  }
+  if (end) {
+    const d = new Date(end);
+    if (isNaN(d.getTime())) return res.status(400).json({ error: 'Invalid `end` date' });
+    params.push(d.toISOString());
+    conditions.push(`timestamp <= $${params.length}`);
+  }
+
+  const where = `WHERE ${conditions.join(' AND ')}`;
 
   try {
     const result = await pool.query(
@@ -335,7 +354,7 @@ app.get('/api/detections/stats', async (req, res) => {
          ROUND(MAX(decibels)::numeric, 2)                                     AS max_decibels,
          ROUND(AVG(duration_seconds)::numeric, 2)                             AS avg_duration_seconds
        FROM detections
-       WHERE 1=1 ${sourceFilter}`,
+       ${where}`,
       params
     );
     res.json(result.rows[0]);

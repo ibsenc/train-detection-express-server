@@ -181,6 +181,8 @@ Aggregate statistics for the dashboard.
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `source` | string | Filter stats to a specific sensor |
+| `start` | string (ISO 8601) | Range start, inclusive. Defaults to all time |
+| `end` | string (ISO 8601) | Range end, inclusive. Defaults to all time |
 
 **Response `200`**
 ```json
