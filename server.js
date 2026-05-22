@@ -320,16 +320,28 @@ app.get('/api/detections/stats', async (req, res) => {
     params.push(source);
     conditions.push(`source = $${params.length}`);
   }
+
+  let startDate = null;
+  let endDate = null;
+
   if (start) {
-    const d = new Date(start);
-    if (isNaN(d.getTime())) return res.status(400).json({ error: 'Invalid `start` date' });
-    params.push(d.toISOString());
-    conditions.push(`timestamp >= $${params.length}`);
+    startDate = new Date(start);
+    if (isNaN(startDate.getTime())) return res.status(400).json({ error: 'Invalid `start` date' });
   }
   if (end) {
-    const d = new Date(end);
-    if (isNaN(d.getTime())) return res.status(400).json({ error: 'Invalid `end` date' });
-    params.push(d.toISOString());
+    endDate = new Date(end);
+    if (isNaN(endDate.getTime())) return res.status(400).json({ error: 'Invalid `end` date' });
+  }
+  if (startDate && endDate && startDate > endDate) {
+    return res.status(400).json({ error: '`start` must be before or equal to `end`' });
+  }
+
+  if (startDate) {
+    params.push(startDate.toISOString());
+    conditions.push(`timestamp >= $${params.length}`);
+  }
+  if (endDate) {
+    params.push(endDate.toISOString());
     conditions.push(`timestamp <= $${params.length}`);
   }
 
@@ -344,6 +356,7 @@ app.get('/api/detections/stats', async (req, res) => {
          COUNT(*) FILTER (WHERE is_confirmed_train = false)                    AS confirmed_false_positives,
          COUNT(*) FILTER (WHERE is_confirmed_train IS NULL
                             AND is_suspected_train = true)                     AS unreviewed_suspected,
+         -- TODO: remove suspected_last_24h/7d once frontend uses start/end params to compute these windows itself
          COUNT(*) FILTER (WHERE timestamp >= NOW() - INTERVAL '24 hours'
                             AND is_suspected_train = true)                     AS suspected_last_24h,
          COUNT(*) FILTER (WHERE timestamp >= NOW() - INTERVAL '7 days'
