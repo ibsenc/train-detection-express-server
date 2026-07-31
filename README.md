@@ -80,28 +80,19 @@ The `POST /api/detections` endpoint accepts `multipart/form-data` uploads contai
 
 ### Deploying changes to Lambda
 
-1. **Install production dependencies** (skip if `node_modules` is already up to date):
-   ```bash
-   npm install --omit=dev
-   ```
+Run the deploy script:
+```bash
+npm run deploy
+```
 
-2. **Create a deployment zip** from the project root:
-   ```bash
-   zip -r deployment.zip . --exclude "*.git*" --exclude ".env" --exclude "*.zip" --exclude "*.sql" --exclude "local_dump*" --exclude "remote_dump*"
-   ```
+This does the following in sequence:
+1. **`npm install --omit=dev`** — ensures production dependencies are up to date
+2. **Creates a timestamped zip** (e.g. `deployment_07_31_2026_14_30_00.zip`) from the project root, excluding `.git`, `.env`, existing zips, and SQL dump files
+3. **Uploads the zip to Lambda** via the AWS CLI targeting the `train-detection-express` function
 
-3. **Upload to Lambda** via the AWS CLI (replace `your-function-name` with your actual function name):
-   ```bash
-   aws lambda update-function-code \
-     --function-name your-function-name \
-     --zip-file fileb://deployment.zip
-   ```
+After deploying, verify in the Lambda console — the **Code** tab will show an updated **Last modified** timestamp. Use the **Test** tab to run a health check event.
 
-   Or upload manually in the Lambda console: **Code** tab → **Upload from** → **.zip file**, then click the **Deploy** button.
-
-4. **Verify the deploy** — the console will show the new **Last modified** timestamp, and you can use the **Test** tab to run a health check event.
-
-> `deployment.zip` is gitignored and should not be committed.
+> Deployment zips are covered by the `*.zip` gitignore pattern and should not be committed.
 
 ---
 

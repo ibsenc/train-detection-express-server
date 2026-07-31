@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "node server.js",
+    "deploy": "npm install --omit=dev && ZIPFILE=\"deployment_$(date +%m_%d_%Y_%H_%M_%S).zip\" && zip -r \"$ZIPFILE\" . --exclude '*.git*' --exclude '.env' --exclude '*.zip' --exclude '*.sql' --exclude 'local_dump*' --exclude 'remote_dump*' && aws lambda update-function-code --function-name train-detection-express --region us-west-2 --profile train-detection-deploy --zip-file \"fileb://$ZIPFILE\""
   },
   "keywords": [],
   "author": "",
