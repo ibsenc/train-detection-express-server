@@ -255,6 +255,19 @@ Manually set the `is_confirmed_train` flag to review a detection.
 
 ---
 
+### `DELETE /api/detections/:id`
+
+Permanently delete a detection record. If the detection has an associated audio file, it is also deleted from S3. If the S3 deletion fails, the database record is still removed and the error is logged server-side (orphaned audio files are tolerated).
+
+**Response `204`** — no content
+
+**Response `404`**
+```json
+{ "error": "Detection not found" }
+```
+
+---
+
 ## Error responses
 
 All endpoints return errors in this shape:
