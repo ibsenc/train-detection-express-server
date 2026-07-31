@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import { execFile } from 'node:child_process';
 import multer from 'multer';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import serverless from 'serverless-http';
 import pool from './db.js';
@@ -453,6 +453,40 @@ app.patch('/api/detections/:id', async (req, res) => {
   } catch (err) {
     console.error('PATCH /api/detections/:id error:', err);
     res.status(500).json({ error: 'Failed to update detection' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/detections/:id
+// Permanently remove a detection record.
+// ---------------------------------------------------------------------------
+app.delete('/api/detections/:id', async (req, res) => {
+  if (!UUID_RE.test(req.params.id)) return res.status(400).json({ error: 'Invalid detection ID' });
+
+  try {
+    const result = await pool.query(
+      'DELETE FROM detections WHERE id = $1 RETURNING audio_url',
+      [req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Detection not found' });
+    }
+
+    const { audio_url } = result.rows[0];
+    if (audio_url) {
+      const key = new URL(audio_url).pathname.slice(1);
+      try {
+        await s3.send(new DeleteObjectCommand({ Bucket: process.env.AWS_S3_BUCKET, Key: key }));
+      } catch (s3Err) {
+        console.error('DELETE /api/detections/:id — S3 deletion failed (orphaned file):', s3Err);
+      }
+    }
+
+    console.log(`[${new Date().toISOString()}] DELETE /api/detections/:id — id=${req.params.id} audio_deleted=${!!audio_url}`);
+    res.status(204).send();
+  } catch (err) {
+    console.error('DELETE /api/detections/:id error:', err);
+    res.status(500).json({ error: 'Failed to delete detection' });
   }
 });
 

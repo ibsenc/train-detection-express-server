@@ -24,7 +24,7 @@ PORT=3000
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=train_detection
-DB_USER=postgres
+DB_USER=camille
 DB_PASSWORD=your_password_here
 DB_SSL=false
 
@@ -51,7 +51,7 @@ TRAIN_MIN_DURATION_SECONDS=1
 ### 3. Initialize the database
 
 ```bash
-psql -U postgres -d train_detection -f db/schema.sql
+psql -U camille -d train_detection -f db/schema.sql
 ```
 
 ### 4. Start the server
@@ -107,26 +107,30 @@ The `POST /api/detections` endpoint accepts `multipart/form-data` uploads contai
 
 ## Database
 
+> **Local Postgres user is `camille`** (macOS default — no password required). `DB_USER=camille` in `.env`.
+
 ### Dump
 
 **Local database:**
 ```bash
-pg_dump -U postgres train_detection > local_dump_05_22_2026.sql
+pg_dump -U camille train_detection > local_dump_MM_DD_YYYY.sql
 ```
 
-**Remote database (via `DATABASE_URL`):**
+**Remote database (via `TRAIN_DATABASE_URL_PROD`):**
 
 Use `--no-owner --no-privileges` to strip out hosted-Postgres-specific roles (e.g. Neon's `neondb_owner`) that don't exist locally:
 ```bash
-pg_dump "$TRAIN_DATABASE_URL_PROD" --no-owner --no-privileges > remote_dump_05_22_2026.sql
+pg_dump "$TRAIN_DATABASE_URL_PROD" --no-owner --no-privileges > remote_dump_MM_DD_YYYY.sql
 ```
 
 ### Restore
 
 Terminate any connections to the db, drop and recreate the local database (to avoid schema conflicts), then restore with local or remote dump:
 ```bash
-psql -U postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'train_detection' AND pid <> pg_backend_pid();"
-dropdb -U postgres train_detection
-createdb -U postgres train_detection
-psql -U postgres -d train_detection < remote_dump_05_22_2026.sql
+psql -U camille -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'train_detection' AND pid <> pg_backend_pid();"
+dropdb -U camille train_detection
+createdb -U camille train_detection
+psql -U camille -d train_detection < remote_dump_MM_DD_YYYY.sql
 ```
+
+> If the database doesn't exist yet, skip the terminate/drop steps and run `createdb` + restore directly.
