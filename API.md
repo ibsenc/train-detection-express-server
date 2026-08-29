@@ -79,7 +79,7 @@ Ingest a new sound event from a sensor node.
 | `id` | string (UUID) | Yes | Client-generated UUID — used as the S3 filename and stored for cross-referencing |
 | `audio_file` | file (.wav) | No | Raw audio recording (max 6 MB) |
 
-Events are automatically flagged `is_suspected_train: true` when `decibels >= TRAIN_MIN_DECIBELS` and `duration_seconds >= TRAIN_MIN_DURATION_SECONDS`. `is_confirmed_train` is always `null` on creation and must be set manually via `PATCH`. (Local only) If a phone number is configured, an iMessage alert is sent for suspected trains.
+Events are automatically flagged `is_suspected_train: true` when `decibels >= TRAIN_MIN_DECIBELS` and `duration_seconds >= TRAIN_MIN_DURATION_SECONDS`. `label` is always `unknown` on creation and must be set manually via `PATCH`. (Local only) If a phone number is configured, an iMessage alert is sent for suspected trains.
 
 **Response `201`**
 ```json
@@ -91,7 +91,7 @@ Events are automatically flagged `is_suspected_train: true` when `decibels >= TR
   "source": "pi-north",
   "audio_url": "https://your-bucket.s3.us-east-1.amazonaws.com/detections/2026-05-18/...",
   "is_suspected_train": true,
-  "is_confirmed_train": null,
+  "label": "unknown",
   "created_at": "2026-05-18T14:00:00.123Z"
 }
 ```
@@ -124,7 +124,8 @@ Query detection events with optional filters. Returns newest-first.
 | `start` | string (ISO 8601) | Range start, inclusive |
 | `end` | string (ISO 8601) | Range end, inclusive |
 | `min_db` | number | Minimum decibel threshold |
-| `confirmed_only` | boolean | `true` to return only confirmed trains. Default `false` |
+| `confirmed_only` | boolean | `true` to return only confirmed trains (`train` or `train_horn`). Default `false` |
+| `label` | string | Filter by exact label: `train`, `train_horn`, `non_train`, or `unknown` |
 | `source` | string | Filter by sensor label |
 | `limit` | number | Max results to return. Default `100`, max `1000` |
 | `offset` | number | Pagination offset. Default `0` |
@@ -144,7 +145,7 @@ Query detection events with optional filters. Returns newest-first.
       "source": "pi-north",
       "audio_url": "https://your-bucket.s3.us-east-1.amazonaws.com/detections/2026-05-18/...",
       "is_suspected_train": true,
-      "is_confirmed_train": null,
+      "label": "train",
       "created_at": "2026-05-18T14:00:00.123Z"
     }
   ]
@@ -161,6 +162,7 @@ Returns the most recent detection.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
+| `label` | string | Filter by exact label: `train`, `train_horn`, `non_train`, or `unknown`. Overrides `confirmed_only` when provided |
 | `confirmed_only` | boolean | `false` to include all events. Default `true` |
 
 **Response `200`** — returns a single detection object (see above)
@@ -190,6 +192,7 @@ Aggregate statistics for the dashboard.
   "total_events": 1042,
   "suspected_trains": 94,
   "confirmed_trains": 87,
+  "confirmed_train_horns": 12,
   "confirmed_false_positives": 5,
   "unreviewed_suspected": 2,
   "suspected_last_24h": 4,
@@ -238,13 +241,13 @@ Generate a presigned S3 URL for streaming or downloading the audio file associat
 
 ### `PATCH /api/detections/:id`
 
-Manually set the `is_confirmed_train` flag to review a detection.
+Manually set the `label` on a detection to review it.
 
 **Request body**
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `is_confirmed_train` | boolean \| null | Yes | `true` = confirmed train, `false` = false positive, `null` = reset to unreviewed |
+| `label` | string | Yes | `train`, `train_horn`, `non_train`, or `unknown` (reset to unreviewed) |
 
 **Response `200`** — returns the updated detection object
 
