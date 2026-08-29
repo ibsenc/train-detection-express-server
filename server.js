@@ -444,7 +444,7 @@ app.get('/api/detections/:id/audio-url', async (req, res) => {
 // Manually set the label on a detection (e.g. from the UI).
 //
 // Body (JSON):
-//   label  {string|null}  required — train|train_horn|non_train|unknown|null (null = reset to unreviewed)
+//   label  {string}  required — train|train_horn|non_train|unknown
 // ---------------------------------------------------------------------------
 const VALID_LABELS = new Set(['train', 'train_horn', 'non_train', 'unknown']);
 
