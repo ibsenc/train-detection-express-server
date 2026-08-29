@@ -198,18 +198,24 @@ app.get('/test-alert', (req, res) => {
 // Returns the most recent confirmed train detection.
 //
 // Query params:
+//   label           {string}   — exact label to match (train|train_horn|non_train|unknown); overrides confirmed_only
 //   confirmed_only  {boolean}  default true — set to false to include all events
 // ---------------------------------------------------------------------------
 app.get('/api/detections/latest', async (req, res) => {
-  const confirmedOnly = req.query.confirmed_only !== 'false';
+  const { confirmed_only, label } = req.query;
+  if (label !== undefined && !VALID_LABELS.has(label)) {
+    return res.status(400).json({ error: 'Invalid `label` value' });
+  }
+  const confirmedOnly = confirmed_only !== 'false';
+
+  const [clause, queryParams] = label !== undefined
+    ? [`WHERE label = $1`, [label]]
+    : [`WHERE ($1 = false OR label IN ('train', 'train_horn'))`, [confirmedOnly]];
 
   try {
     const result = await pool.query(
-      `SELECT * FROM detections
-       WHERE ($1 = false OR is_confirmed_train = true)
-       ORDER BY timestamp DESC
-       LIMIT 1`,
-      [confirmedOnly]
+      `SELECT * FROM detections ${clause} ORDER BY timestamp DESC LIMIT 1`,
+      queryParams
     );
 
     if (result.rows.length === 0) {
@@ -230,13 +236,14 @@ app.get('/api/detections/latest', async (req, res) => {
 //   start           {string}  ISO 8601 — range start (inclusive)
 //   end             {string}  ISO 8601 — range end (inclusive)
 //   min_db          {number}  — minimum decibel threshold
-//   confirmed_only  {boolean} default false — only return auto-confirmed trains
+//   confirmed_only  {boolean} default false — only return confirmed trains (train or train_horn)
+//   label           {string}  — filter by exact label (train|train_horn|non_train|unknown)
 //   source          {string}  — filter by sensor label
 //   limit           {number}  default 100, max 1000
 //   offset          {number}  default 0
 // ---------------------------------------------------------------------------
 app.get('/api/detections', async (req, res) => {
-  const { start, end, min_db, confirmed_only, source, limit = 100, offset = 0 } = req.query;
+  const { start, end, min_db, confirmed_only, label, source, limit = 100, offset = 0 } = req.query;
 
   const parsedLimit = Math.min(parseInt(limit) || 100, 1000);
   const parsedOffset = parseInt(offset) || 0;
@@ -263,7 +270,12 @@ app.get('/api/detections', async (req, res) => {
     conditions.push(`decibels >= $${params.length}`);
   }
   if (confirmed_only === 'true') {
-    conditions.push('is_confirmed_train = true');
+    conditions.push("label IN ('train', 'train_horn')");
+  }
+  if (label !== undefined) {
+    if (!VALID_LABELS.has(label)) return res.status(400).json({ error: 'Invalid `label` value' });
+    params.push(label);
+    conditions.push(`label = $${params.length}`);
   }
   if (source) {
     params.push(source);
@@ -352,9 +364,10 @@ app.get('/api/detections/stats', async (req, res) => {
       `SELECT
          COUNT(*)                                                               AS total_events,
          COUNT(*) FILTER (WHERE is_suspected_train = true)                     AS suspected_trains,
-         COUNT(*) FILTER (WHERE is_confirmed_train = true)                     AS confirmed_trains,
-         COUNT(*) FILTER (WHERE is_confirmed_train = false)                    AS confirmed_false_positives,
-         COUNT(*) FILTER (WHERE is_confirmed_train IS NULL
+         COUNT(*) FILTER (WHERE label = 'train')                              AS confirmed_trains,
+         COUNT(*) FILTER (WHERE label = 'train_horn')                          AS confirmed_train_horns,
+         COUNT(*) FILTER (WHERE label = 'non_train')                           AS confirmed_false_positives,
+         COUNT(*) FILTER (WHERE label = 'unknown'
                             AND is_suspected_train = true)                     AS unreviewed_suspected,
          -- TODO: remove suspected_last_24h/7d once frontend uses start/end params to compute these windows itself
          COUNT(*) FILTER (WHERE timestamp >= NOW() - INTERVAL '24 hours'
@@ -362,7 +375,7 @@ app.get('/api/detections/stats', async (req, res) => {
          COUNT(*) FILTER (WHERE timestamp >= NOW() - INTERVAL '7 days'
                             AND is_suspected_train = true)                     AS suspected_last_7d,
          MAX(timestamp) FILTER (WHERE is_suspected_train = true)              AS last_suspected_at,
-         MAX(timestamp) FILTER (WHERE is_confirmed_train = true)              AS last_confirmed_at,
+         MAX(timestamp) FILTER (WHERE label IN ('train', 'train_horn'))       AS last_confirmed_at,
          ROUND(AVG(decibels)::numeric, 2)                                     AS avg_decibels,
          ROUND(MAX(decibels)::numeric, 2)                                     AS max_decibels,
          ROUND(AVG(duration_seconds)::numeric, 2)                             AS avg_duration_seconds
@@ -428,23 +441,30 @@ app.get('/api/detections/:id/audio-url', async (req, res) => {
 
 // ---------------------------------------------------------------------------
 // PATCH /api/detections/:id
-// Manually override the is_confirmed_train flag (e.g. from the UI).
+// Manually set the label on a detection (e.g. from the UI).
 //
 // Body (JSON):
-//   is_confirmed_train  {boolean}  required
+//   label  {string|null}  required — train|train_horn|non_train|unknown|null (null = reset to unreviewed)
 // ---------------------------------------------------------------------------
+const VALID_LABELS = new Set(['train', 'train_horn', 'non_train', 'unknown']);
+
 app.patch('/api/detections/:id', async (req, res) => {
   if (!UUID_RE.test(req.params.id)) return res.status(400).json({ error: 'Invalid detection ID' });
 
-  const { is_confirmed_train } = req.body;
-  if (typeof is_confirmed_train !== 'boolean' && is_confirmed_train !== null) {
-    return res.status(400).json({ error: '`is_confirmed_train` must be true, false, or null' });
+  const { label } = req.body;
+  if (!VALID_LABELS.has(label)) {
+    return res.status(400).json({ error: '`label` must be train, train_horn, non_train, or unknown' });
   }
+
+  // keep is_confirmed_train in sync during transition (Phase 3 will drop it)
+  const legacyValue = (label === 'train' || label === 'train_horn') ? true
+                    : label === 'non_train' ? false
+                    : null; // 'unknown' maps to null
 
   try {
     const result = await pool.query(
-      'UPDATE detections SET is_confirmed_train = $1 WHERE id = $2 RETURNING *',
-      [is_confirmed_train, req.params.id]
+      'UPDATE detections SET label = $1, is_confirmed_train = $2 WHERE id = $3 RETURNING *',
+      [label, legacyValue, req.params.id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Detection not found' });
